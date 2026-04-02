@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-pancurses = "0.17"
+pancurses = { version = "0.17", features = ["wide"] }
 native-tls = "0.2.11"
 url = "2.5.0"
 unicode-width = "0.1.11"
