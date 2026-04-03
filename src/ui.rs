@@ -155,35 +155,29 @@ fn draw_bookmarks(window: &Window, state: &BrowserState, max_y: i32, width: usiz
 }
 
 fn draw_footer(window: &Window, state: &BrowserState, max_y: i32, width: usize) {
-    let mut hovered = String::new();
-    if let (Some(page), Some(idx)) = (&state.current_page, state.selected_link_index) {
-        if let Some(GeminiLine::Link(u, _)) = page
-            .content
-            .iter()
-            .filter(|l| matches!(l, GeminiLine::Link(..)))
-            .nth(idx)
-        {
-            hovered = format!(" | LINK: {}", u);
-        }
-    }
-
     window.attron(COLOR_PAIR(2));
-    let footer = if state.input_mode == InputMode::Editing {
+    
+    let footer = if let Some(msg) = &state.error_message {
+        // To pozwoli wyświetlić "Bookmarks saved!" lub błędy
+        format!(" MESSAGE: {}", msg)
+    } else if state.input_mode == InputMode::Editing {
         format!(" OPEN URL: {}", state.url_input)
     } else {
-        format!(
-            " G:Go B:Back F:Fwd TAB:Nav C-B:Book L:List Q:Quit{}",
-            hovered
-        )
+        let mut hovered = String::new();
+        if let (Some(page), Some(idx)) = (&state.current_page, state.selected_link_index) {
+            if let Some(GeminiLine::Link(u, _)) = page.content.iter()
+                .filter(|l| matches!(l, GeminiLine::Link(..)))
+                .nth(idx) {
+                hovered = format!(" | LINK: {}", u);
+            }
+        }
+        format!(" G:Go B:Back F:Fwd TAB:Nav C-B:Book L:List Q:Quit{}", hovered)
     };
+
     window.mvaddstr(
         max_y - 1,
         0,
-        &format!(
-            "{:<width$}",
-            truncate_to_width(&footer, width),
-            width = width
-        ),
+        &format!("{:<width$}", truncate_to_width(&footer, width), width = width),
     );
     window.attroff(COLOR_PAIR(2));
 }

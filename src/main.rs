@@ -74,6 +74,10 @@ fn main() {
 }
 
 fn handle_input(input: Input, state: &mut BrowserState, tx: mpsc::Sender<AppEvent>) {
+    if state.error_message.is_some() {
+        state.error_message = None;
+    }
+
     match state.input_mode {
         InputMode::Normal => handle_normal_mode(input, state, tx),
         InputMode::Editing => handle_editing_mode(input, state, tx),
@@ -369,5 +373,20 @@ mod tests {
         assert_eq!(state.bookmarks.len(), 1);
         assert_eq!(state.bookmarks[0].url, "gemini://new-page.com");
         assert!(state.error_message.as_ref().unwrap().contains("saved"));
+    }
+
+    #[test]
+    fn test_bookmark_shortcut_updates_state_message() {
+        let mut state = BrowserState::new(vec![]);
+        state.current_page = Some(Page {
+            url: Url::parse("gemini://test.pl").unwrap(),
+            content: vec![],
+        });
+
+        handle_normal_mode(Input::Character('\u{2}'), &mut state, mpsc::channel().0);
+
+        assert!(state.error_message.is_some());
+        assert_eq!(state.error_message.unwrap(), "Bookmarks saved!");
+        assert_eq!(state.bookmarks.len(), 1);
     }
 }
