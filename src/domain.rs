@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+use std::io::Read;
+use std::io::Write;
+use std::{collections::VecDeque, fs::File, path::PathBuf};
 use url::Url;
-use std::collections::VecDeque;
-use serde::{Serialize, Deserialize};
 
 const HISTORY_LIMIT: usize = 20;
 
@@ -77,5 +79,44 @@ impl BrowserState {
     pub fn set_error(&mut self, msg: impl Into<String>) {
         self.error_message = Some(msg.into());
         self.is_loading = false;
+    }
+
+    fn get_bookmarks_path() -> PathBuf {
+        let mut path = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        if path.starts_with("/usr/bin") {
+            if let Some(home) = std::env::var_os("HOME") {
+                path = PathBuf::from(home).join(".gemini_bookmarks.bin");
+                return path;
+            }
+        }
+        path.push("bookmarks.bin");
+        path
+    }
+
+    pub fn save_bookmarks(&mut self) {
+        let path = Self::get_bookmarks_path();
+        if let Ok(encoded) = bincode::serialize(&self.bookmarks) {
+            if let Ok(mut file) = File::create(path) {
+                let _ = file.write_all(&encoded);
+                self.error_message = Some("Bookmarks saved!".to_string());
+            }
+        }
+    }
+
+    pub fn load_bookmarks() -> Vec<Bookmark> {
+        let path = Self::get_bookmarks_path();
+        if let Ok(mut file) = File::open(path) {
+            let mut buffer = Vec::new();
+            if file.read_to_end(&mut buffer).is_ok() {
+                if let Ok(decoded) = bincode::deserialize(&buffer) {
+                    return decoded;
+                }
+            }
+        }
+        Vec::new()
     }
 }

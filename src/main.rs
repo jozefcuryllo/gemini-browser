@@ -24,7 +24,7 @@ fn main() {
         ui::init_colors();
     }
 
-    let initial_bookmarks = Vec::new();
+    let initial_bookmarks = BrowserState::load_bookmarks();
     let mut state = BrowserState::new(initial_bookmarks);
     let (tx, rx) = mpsc::channel();
 
@@ -101,11 +101,18 @@ fn handle_normal_mode(input: Input, state: &mut BrowserState, tx: mpsc::Sender<A
         Input::Character('h') => state.input_mode = InputMode::Help,
         Input::Character('l') => state.input_mode = InputMode::Bookmarks,
         Input::Character('\u{2}') => {
+            // Ctrl+B
             if let Some(p) = &state.current_page {
-                state.bookmarks.push(Bookmark {
+                let bookmark = Bookmark {
                     url: p.url.to_string(),
                     title: p.url.to_string(),
-                });
+                };
+                if !state.bookmarks.contains(&bookmark) {
+                    state.bookmarks.push(bookmark);
+                    state.save_bookmarks();
+                } else {
+                    state.set_error("Already bookmarked");
+                }
             }
         }
         Input::Character('b') => {
@@ -243,7 +250,7 @@ fn handle_bookmarks_mode(input: Input, state: &mut BrowserState, tx: mpsc::Sende
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::mpsc;
+    use std::{fs, sync::mpsc};
     use url::Url;
 
     #[test]
@@ -296,5 +303,71 @@ mod tests {
 
         assert!(state.current_request_id > initial_id);
         assert!(state.is_loading);
+    }
+
+    #[test]
+    fn test_bookmark_serialization_cycle() {
+        let bookmarks = vec![
+            Bookmark {
+                url: "gemini://test.com".into(),
+                title: "Test".into(),
+            },
+            Bookmark {
+                url: "gemini://example.org".into(),
+                title: "Example".into(),
+            },
+        ];
+
+        let encoded = bincode::serialize(&bookmarks).expect("Serialization failed");
+        let decoded: Vec<Bookmark> =
+            bincode::deserialize(&encoded).expect("Deserialization failed");
+
+        assert_eq!(bookmarks, decoded);
+    }
+
+    #[test]
+    fn test_save_and_load_logic() {
+        let test_path = std::env::current_exe()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("bookmarks.bin");
+
+        let mut state = BrowserState::new(vec![]);
+        state.bookmarks.push(Bookmark {
+            url: "gemini://persist.test".into(),
+            title: "Persist".into(),
+        });
+
+        state.save_bookmarks();
+        assert!(test_path.exists());
+
+        let loaded = BrowserState::load_bookmarks();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].url, "gemini://persist.test");
+
+        let _ = fs::remove_file(test_path);
+    }
+
+    #[test]
+    fn test_ctrl_b_adds_bookmark_and_sets_message() {
+        let mut state = BrowserState::new(vec![]);
+        let url = Url::parse("gemini://new-page.com").unwrap();
+        state.current_page = Some(Page {
+            url: url.clone(),
+            content: vec![],
+        });
+
+        if let Some(p) = &state.current_page {
+            state.bookmarks.push(Bookmark {
+                url: p.url.to_string(),
+                title: p.url.to_string(),
+            });
+            state.save_bookmarks();
+        }
+
+        assert_eq!(state.bookmarks.len(), 1);
+        assert_eq!(state.bookmarks[0].url, "gemini://new-page.com");
+        assert!(state.error_message.as_ref().unwrap().contains("saved"));
     }
 }
